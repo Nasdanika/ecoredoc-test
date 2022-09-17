@@ -1,1 +1,1 @@
-# ecoredoc-test
+Tests of Nasdanika HTML [Ecore](https://docs.nasdanika.org/modules/html/modules/ecore/index.html).
