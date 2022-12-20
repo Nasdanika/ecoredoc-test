@@ -27,12 +27,8 @@ import org.apache.commons.codec.binary.Hex;
 import org.eclipse.emf.codegen.ecore.genmodel.GenModel;
 import org.eclipse.emf.codegen.ecore.genmodel.GenPackage;
 import org.eclipse.emf.common.util.URI;
-import org.eclipse.emf.ecore.EClassifier;
-import org.eclipse.emf.ecore.EModelElement;
-import org.eclipse.emf.ecore.ENamedElement;
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.emf.ecore.EPackage;
-import org.eclipse.emf.ecore.EReference;
 import org.eclipse.emf.ecore.resource.Resource;
 import org.eclipse.emf.ecore.resource.ResourceSet;
 import org.eclipse.emf.ecore.resource.impl.ResourceSetImpl;
@@ -64,7 +60,7 @@ import org.nasdanika.html.ecore.GenModelResourceSet;
 import org.nasdanika.html.model.app.Action;
 import org.nasdanika.html.model.app.AppPackage;
 import org.nasdanika.html.model.app.gen.AppAdapterFactory;
-import org.nasdanika.html.model.app.gen.AppGenYamlSupplier;
+import org.nasdanika.html.model.app.gen.AppGenObjectLoaderSupplier;
 import org.nasdanika.html.model.app.gen.Util;
 import org.nasdanika.html.model.bootstrap.BootstrapPackage;
 import org.nasdanika.html.model.html.HtmlPackage;
@@ -250,7 +246,6 @@ public class EcoreDocGenerator {
 		// Physical location relative to the projects (git) root folder -> logical (workspace) name 
 		Map<String,String> bundleMap = new LinkedHashMap<>();
 		bundleMap.put("core/ncore", "org.nasdanika.ncore");
-		bundleMap.put("core/diagram", "org.nasdanika.diagram");
 		bundleMap.put("core/exec", "org.nasdanika.exec");
 		bundleMap.put("core/flow", "org.nasdanika.flow");
 	
@@ -404,7 +399,7 @@ public class EcoreDocGenerator {
 		
 		// Diagnosing loaded resources. 
 		try {
-			return org.nasdanika.common.Util.call(new AppGenYamlSupplier(resourceURI, context), progressMonitor, diagnosticConsumer);
+			return org.nasdanika.common.Util.call(new AppGenObjectLoaderSupplier(resourceURI, context), progressMonitor, diagnosticConsumer);
 		} catch (DiagnosticException e) {
 			System.err.println("******************************");
 			System.err.println("*      Diagnostic failed     *");
