@@ -7,8 +7,6 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.util.Base64;
 import java.util.Date;
 import java.util.LinkedHashMap;
@@ -253,7 +251,7 @@ public class EcoreDocGenerator {
 		modelDir.mkdirs();
 		
 		File modelDocActionsDir = new File("target/model-doc/actions").getAbsoluteFile();
-		delete(modelDocActionsDir);
+		org.nasdanika.common.Util.delete(modelDocActionsDir);
 		modelDocActionsDir.mkdirs();
 		
 		Map<URI,File> modelToActionModelMap = new LinkedHashMap<>();
@@ -262,12 +260,12 @@ public class EcoreDocGenerator {
 		for (Entry<String, String> be: bundleMap.entrySet()) {					
 			File sourceDir = new File(projectsRoot, be.getKey());
 			File targetDir = new File(modelDir, be.getValue());
-			copy(new File(sourceDir, "model"), new File(targetDir, "model"), true, (source, target) -> {
+			org.nasdanika.common.Util.copy(new File(sourceDir, "model"), new File(targetDir, "model"), true, (source, target) -> {
 				if (target.getName().endsWith(".genmodel")) {
 					modelToActionModelMap.put(URI.createFileURI(target.getAbsolutePath()), new File(modelDocActionsDir, target.getName() + ".xml"));
 				}
 			});			
-			copy(new File(sourceDir, "doc"), new File(targetDir, "doc"), true, null);
+			org.nasdanika.common.Util.copy(new File(sourceDir, "doc"), new File(targetDir, "doc"), true, null);
 		}
 		
 	//	URL eCoreGenmodelURL = getClass().getResource("/model/Ecore.genmodel");
@@ -302,34 +300,6 @@ public class EcoreDocGenerator {
 	
 			actionModelResource.save(null);
 		}		
-	}
-	
-	public static void copy(File source, File target, boolean cleanTarget, BiConsumer<File,File> listener) throws IOException {
-		if (cleanTarget && target.isDirectory()) {
-			delete(target.listFiles());
-		}
-		if (source.isDirectory()) {
-			target.mkdirs();
-			for (File sc: source.listFiles()) {
-				copy(sc, new File(target, sc.getName()), false, listener);
-			}
-		} else if (source.isFile()) {
-			Files.copy(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);			
-			if (listener != null) {
-				listener.accept(source, target);
-			}
-		}
-	}
-	
-	public static void delete(File... files) {
-		for (File file: files) {
-			if (file.exists()) {
-				if (file.isDirectory()) {
-					delete(file.listFiles());
-				}
-				file.delete();
-			}
-		}
 	}
 	
 	/**
