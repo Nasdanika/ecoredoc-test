@@ -2,24 +2,16 @@ package org.nasdanika.html.ecore.test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.Date;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 import org.apache.commons.codec.binary.Hex;
 import org.eclipse.emf.codegen.ecore.genmodel.GenModel;
@@ -30,60 +22,35 @@ import org.eclipse.emf.ecore.EPackage;
 import org.eclipse.emf.ecore.resource.Resource;
 import org.eclipse.emf.ecore.resource.ResourceSet;
 import org.eclipse.emf.ecore.resource.impl.ResourceSetImpl;
-import org.eclipse.emf.ecore.util.Diagnostician;
 import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.eclipse.emf.ecore.xmi.impl.XMIResourceFactoryImpl;
-import org.json.JSONObject;
-import org.jsoup.nodes.Element;
-import org.nasdanika.common.ConsumerFactory;
 import org.nasdanika.common.Context;
-import org.nasdanika.common.Diagnostic;
-import org.nasdanika.common.DiagnosticException;
 import org.nasdanika.common.DiagramGenerator;
-import org.nasdanika.common.ExecutionException;
 import org.nasdanika.common.MutableContext;
-import org.nasdanika.common.NasdanikaException;
 import org.nasdanika.common.NullProgressMonitor;
 import org.nasdanika.common.ProgressMonitor;
-import org.nasdanika.common.Status;
 import org.nasdanika.emf.EObjectAdaptable;
-import org.nasdanika.exec.ExecPackage;
-import org.nasdanika.exec.content.ContentPackage;
-import org.nasdanika.exec.resources.Container;
-import org.nasdanika.exec.resources.ResourcesFactory;
-import org.nasdanika.exec.resources.ResourcesPackage;
 import org.nasdanika.html.ecore.EcoreActionSupplier;
 import org.nasdanika.html.ecore.EcoreActionSupplierAdapterFactory;
 import org.nasdanika.html.ecore.GenModelResourceSet;
-import org.nasdanika.html.model.app.Action;
-import org.nasdanika.html.model.app.AppPackage;
-import org.nasdanika.html.model.app.gen.AppAdapterFactory;
-import org.nasdanika.html.model.app.gen.AppGenObjectLoaderSupplier;
-import org.nasdanika.html.model.app.gen.Util;
-import org.nasdanika.html.model.bootstrap.BootstrapPackage;
-import org.nasdanika.html.model.html.HtmlPackage;
-import org.nasdanika.resources.BinaryEntityContainer;
-import org.nasdanika.resources.FileSystemContainer;
-
-import com.redfin.sitemapgenerator.ChangeFreq;
-import com.redfin.sitemapgenerator.WebSitemapGenerator;
-import com.redfin.sitemapgenerator.WebSitemapUrl;
+import org.nasdanika.html.model.app.gen.ActionSiteGenerator;
 
 import net.sourceforge.plantuml.FileFormat;
 import net.sourceforge.plantuml.FileFormatOption;
 import net.sourceforge.plantuml.SourceStringReader;
 
 public class EcoreDocGenerator {
-	
-	
-	private static final URI CONTAINER_MODEL_URI = URI.createFileURI(new File("target/model-doc/container.xml").getAbsolutePath());				
-	
+		
 	private DiagramGenerator createDiagramGenerator(ProgressMonitor progressMonitor) {
 		DiagramGenerator plantUMLGenerator = new DiagramGenerator() {
 			
 			@Override
 			public boolean isSupported(String dialect) {
-				return DiagramGenerator.UML_DIALECT.equals(dialect);
+				return DiagramGenerator.UML_DIALECT.equals(dialect)
+						|| DiagramGenerator.GANTT_DIALECT.equals(dialect)
+						|| DiagramGenerator.MINDMAP_DIALECT.equals(dialect)
+						|| DiagramGenerator.SALT_DIALECT.equals(dialect)
+						|| DiagramGenerator.WBS_DIALECT.equals(dialect);
 			}
 			
 			@Override
@@ -154,7 +121,7 @@ public class EcoreDocGenerator {
 	 * @param progressMonitor
 	 * @throws Exception
 	 */
-	public void generateActionModel(Context ctx, ProgressMonitor progressMonitor) throws Exception {
+	public void generateActionModel(Context context, ProgressMonitor progressMonitor) throws Exception {
 		GenModelResourceSet ecoreModelsResourceSet = new GenModelResourceSet();
 		
 		Map<String,String> pathMap = new ConcurrentHashMap<>();
@@ -175,11 +142,6 @@ public class EcoreDocGenerator {
 			// Encoding NS URI as HEX. Shall never reach this point.
 			return Hex.encodeHexString(ePackage.getNsURI().getBytes(StandardCharsets.UTF_8));
 		};
-		
-		MutableContext context = ctx.fork();
-		
-		DiagramGenerator diagramGenerator = createDiagramGenerator(progressMonitor);
-		context.register(DiagramGenerator.class, diagramGenerator);
 		
 		ecoreModelsResourceSet.getAdapterFactories().add(new EcoreActionSupplierAdapterFactory(context, getEPackagePath, org.nasdanika.common.Util.createNasdanikaJavadocResolver(new File("../.."), progressMonitor)) {
 			
@@ -302,191 +264,13 @@ public class EcoreDocGenerator {
 		}		
 	}
 	
-	/**
-	 * Generates a resource model from an action model.
-	 * @throws Exception
-	 */
-	public void generateResourceModel(Context context, ProgressMonitor progressMonitor) throws Exception {
-		Consumer<Diagnostic> diagnosticConsumer = diagnostic -> {
-			if (diagnostic.getStatus() == Status.FAIL || diagnostic.getStatus() == Status.ERROR) {
-				System.err.println("***********************");
-				System.err.println("*      Diagnostic     *");
-				System.err.println("***********************");
-				diagnostic.dump(System.err, 4, Status.FAIL, Status.ERROR);
-			}
-			if (diagnostic.getStatus() !=Status.SUCCESS) {
-				throw new DiagnosticException(diagnostic);
-			};
-		};
-		
-		String actionsResource = "actions.yml";
-		Action root = (Action) Objects.requireNonNull(loadObject(actionsResource, diagnosticConsumer, context, progressMonitor), "Loaded null from " + actionsResource);
-		
-		Container container = ResourcesFactory.eINSTANCE.createContainer();
-		container.setName("doc-site");
-		
-		ResourceSet resourceSet = new ResourceSetImpl();
-		resourceSet.getResourceFactoryRegistry().getExtensionToFactoryMap().put(Resource.Factory.Registry.DEFAULT_EXTENSION, new XMIResourceFactoryImpl());
-		Resource modelResource = resourceSet.createResource(CONTAINER_MODEL_URI);
-		modelResource.getContents().add(container);
-		
-		String pageTemplateResource = "page-template.yml";
-		org.nasdanika.html.model.bootstrap.Page pageTemplate = (org.nasdanika.html.model.bootstrap.Page) Objects.requireNonNull(loadObject(pageTemplateResource, diagnosticConsumer, context, progressMonitor), "Loaded null from " + pageTemplateResource);
-		
-		Util.generateSite(
-				root, 
-				pageTemplate,
-				container,
-				null,
-				null,
-				context,
-				progressMonitor);
-		
-		modelResource.save(null);
-	}
-	
-	/**
-	 * Loads object from a classpath resource.
-	 * @param resource
-	 * @param diagnosticConsumer
-	 * @param context
-	 * @param progressMonitor
-	 * @return
-	 * @throws Exception
-	 */
-	private EObject loadObject(
-			String resource, 
-			Consumer<org.nasdanika.common.Diagnostic> diagnosticConsumer,
-			Context context,
-			ProgressMonitor progressMonitor) throws Exception {
-		
-		Class<?> clazz = EcoreDocGenerator.this.getClass();
-		URL resourceURL = clazz.getResource(resource);
+	private static URI getResourceURI(String path) {
+		Class<?> clazz = EcoreDocGenerator.class;
+		URL resourceURL = clazz.getResource(path);
 		if (resourceURL == null) {
-			throw new IllegalArgumentException("Classloader resource not found: " + resource + " by " + clazz); 
+			throw new IllegalArgumentException("Classloader resource not found: " + path + " by " + clazz); 
 		}
-		URI resourceURI = URI.createURI(resourceURL.toString());
-		
-		// Diagnosing loaded resources. 
-		try {
-			return org.nasdanika.common.Util.call(new AppGenObjectLoaderSupplier(resourceURI, context), progressMonitor, diagnosticConsumer);
-		} catch (DiagnosticException e) {
-			System.err.println("******************************");
-			System.err.println("*      Diagnostic failed     *");
-			System.err.println("******************************");
-			e.getDiagnostic().dump(System.err, 4, Status.FAIL);
-			throw e;
-		}		
-	}
-	
-	/**
-	 * Generates files from the previously generated resource model.
-	 * @throws Exception
-	 */
-	public void generateContainer(Context context, ProgressMonitor progressMonitor) throws Exception {
-		ResourceSet resourceSet = createResourceSet();
-		
-		resourceSet.getAdapterFactories().add(new AppAdapterFactory());
-				
-		Resource containerResource = resourceSet.getResource(CONTAINER_MODEL_URI, true);
-	
-		File siteDir = new File("target/model-doc/site");
-		BinaryEntityContainer container = new FileSystemContainer(siteDir); 
-		for (EObject eObject : containerResource.getContents()) {
-			Diagnostician diagnostician = new Diagnostician();
-			org.eclipse.emf.common.util.Diagnostic diagnostic = diagnostician.validate(eObject);
-			if (diagnostic.getSeverity() == org.eclipse.emf.common.util.Diagnostic.ERROR) {
-				throw new ExecutionException("Diagnostic failed");
-			}
-			try {
-				ConsumerFactory<BinaryEntityContainer> consumerFactory = Objects.requireNonNull(EObjectAdaptable.adaptToConsumerFactory(eObject, BinaryEntityContainer.class), "Cannot adapt to ConsumerFactory");
-				Diagnostic callDiagnostic = org.nasdanika.common.Util.call(consumerFactory.create(context), container, progressMonitor);
-				Status status = callDiagnostic.getStatus();
-				if (status == Status.FAIL || status == Status.ERROR) {
-					System.err.println("******************************");
-					System.err.println("*      Diagnostic error     *");
-					System.err.println("******************************");
-					callDiagnostic.dump(System.err, 4, Status.FAIL, Status.ERROR);				
-				}
-			} catch (DiagnosticException e) {
-				System.err.println("******************************");
-				System.err.println("*      Diagnostic failed     *");
-				System.err.println("******************************");
-				e.getDiagnostic().dump(System.err, 4, Status.FAIL);
-				throw e;
-			}
-		}	
-		
-		generateSitemapAndSearch(new File(siteDir, "doc-site"));		
-	}
-	
-	protected ResourceSet createResourceSet() {
-		// Load model from XMI
-		ResourceSet resourceSet = new ResourceSetImpl();
-		resourceSet.getResourceFactoryRegistry().getExtensionToFactoryMap().put(Resource.Factory.Registry.DEFAULT_EXTENSION, new XMIResourceFactoryImpl());
-	
-		resourceSet.getPackageRegistry().put(ExecPackage.eNS_URI, ExecPackage.eINSTANCE);
-		resourceSet.getPackageRegistry().put(ContentPackage.eNS_URI, ContentPackage.eINSTANCE);
-		resourceSet.getPackageRegistry().put(ResourcesPackage.eNS_URI, ResourcesPackage.eINSTANCE);
-		resourceSet.getPackageRegistry().put(HtmlPackage.eNS_URI, HtmlPackage.eINSTANCE);
-		resourceSet.getPackageRegistry().put(BootstrapPackage.eNS_URI, BootstrapPackage.eINSTANCE);
-		resourceSet.getPackageRegistry().put(AppPackage.eNS_URI, AppPackage.eINSTANCE);
-		return resourceSet;
-	}
-	
-	/**
-	 * 
-	 * @param siteDir
-	 * @return Number of broken links.
-	 * @throws IOException
-	 */
-	private void generateSitemapAndSearch(File siteDir) throws IOException {
-		AtomicInteger problems = new AtomicInteger();
-		
-		// Site map and search index
-		JSONObject searchDocuments = new JSONObject();		
-		String domain = "https://docs.nasdanika.org";
-		WebSitemapGenerator wsg = new WebSitemapGenerator(domain, siteDir);
-		BiConsumer<File, String> listener = new BiConsumer<File, String>() {
-			
-			@Override
-			public void accept(File file, String path) {
-				if (path.endsWith(".html")) {
-					try {
-						WebSitemapUrl url = new WebSitemapUrl.Options(domain + "/" + path)
-							    .lastMod(new Date(file.lastModified())).changeFreq(ChangeFreq.WEEKLY).build();
-						wsg.addUrl(url); 
-					} catch (MalformedURLException e) {
-						throw new NasdanikaException(e);
-					}
-					
-					// Excluding search.html and aggregator pages which contain information present elsewhere
-					try {	
-						Predicate<String> predicate = org.nasdanika.html.model.app.gen.Util.createRelativeLinkPredicate(file, siteDir);						
-						Consumer<? super Element> inspector = org.nasdanika.html.model.app.gen.Util.createInspector(predicate, error -> {
-							System.err.println("[" + path +"] " + error);
-							problems.incrementAndGet();
-						});
-						JSONObject searchDocument = org.nasdanika.html.model.app.gen.Util.createSearchDocument(path, file, inspector, null);
-						if (searchDocument != null) {
-							searchDocuments.put(path, searchDocument);
-						}
-					} catch (IOException e) {
-						throw new NasdanikaException(e);
-					}
-				}
-			}
-		};
-		org.nasdanika.common.Util.walk(null, listener, siteDir.listFiles());
-		wsg.write();	
-	
-		try (FileWriter writer = new FileWriter(new File(siteDir, "search-documents.js"))) {
-			writer.write("var searchDocuments = " + searchDocuments);
-		}
-		
-		if (problems.get() != 22) { // Assuming 22 known problems or false positives
-			throw new ExecutionException("There are broken links: " + problems.get());
-		};
+		return URI.createURI(resourceURL.toString());		
 	}
 	
 	/**
@@ -496,11 +280,30 @@ public class EcoreDocGenerator {
 	public void generateSite() throws Exception {
 		ProgressMonitor progressMonitor = new NullProgressMonitor();
 		MutableContext context = Context.EMPTY_CONTEXT.fork();
+		DiagramGenerator diagramGenerator = createDiagramGenerator(progressMonitor);
+		context.register(DiagramGenerator.class, diagramGenerator);
+		
 		// Marker factory can be used to establish traceability from documentation to model sources in version control, e.g. using GitMarkerFactory.
 		// context.register(MarkerFactory.class, ...);   
 		generateActionModel(context, progressMonitor);
-		generateResourceModel(context, progressMonitor);
-		generateContainer(context, progressMonitor);
+		ActionSiteGenerator siteGenerator = new ActionSiteGenerator() {
+			
+			@Override
+			protected MutableContext createContext(ProgressMonitor progressMonitor) {
+				return context;
+			}
+			
+		};
+		
+		Map<String, Collection<String>> errors = siteGenerator.generate(
+				getResourceURI("actions.yml"),
+				getResourceURI("page-template.yml"),
+				"https://nasdanika.org/test",
+				new File("target/ecoredoc-site"),
+				new File("target/ecoredoc-work-dir"),
+				false);
+		
+		System.out.println(errors);
 	}	
 
 }

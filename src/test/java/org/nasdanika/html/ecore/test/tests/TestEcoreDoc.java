@@ -1,4 +1,4 @@
-package org.nasdanika.html.ecore.tests;
+package org.nasdanika.html.ecore.test.tests;
 
 import org.junit.jupiter.api.Test;
 import org.nasdanika.html.ecore.test.EcoreDocGenerator;
