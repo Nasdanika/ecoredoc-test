@@ -5,7 +5,7 @@ module org.nasdanika.html.ecore.test{
 	requires org.apache.commons.codec;
 	requires org.eclipse.emf.codegen.ecore;
 	requires org.eclipse.emf.ecore.xmi;
-	requires plantuml;
+	requires net.sourceforge.plantuml;
 	
 	exports org.nasdanika.html.ecore.test;
 	
